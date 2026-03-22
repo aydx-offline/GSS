@@ -305,12 +305,13 @@ with left_col:
         if st.session_state.t == 0:
             # 1. 初始化并行的轮次状态
             if 'setup_phase' not in st.session_state:
-                st.session_state.setup_phase = 1              # 记录当前是第几轮 (1~3)
+                st.session_state.setup_phase = 1              # 记录当前是第几轮 (1~2)
             if 'claimed_this_round' not in st.session_state:
                 st.session_state.claimed_this_round = []      # 记录这轮谁已经占领过了
 
-            if st.session_state.setup_phase <= 3:
-                st.subheader(f"🏁 初始领土划分 - 第 {st.session_state.setup_phase} 轮 / 共 3 轮")
+            if st.session_state.setup_phase <= 2:
+                st.subheader(f"初始领土划分 - 第 {st.session_state.setup_phase} 轮 / 共2轮")
+                st.info("💡 每轮每国仅可占领 1 块领土（消耗 10 黄金）。点击【放弃】则本轮不买地，保留资金。")
                 
                 # 获取全局已被占领的领土，防冲突参考
                 all_claimed_lands = [l for lands in st.session_state.dict_land.values() for l in lands]
@@ -328,24 +329,39 @@ with left_col:
                         with cols[idx]:
                             st.markdown(f"**{c} 国**")
                             # 录入当前国家的选择
-                            land_input = st.text_input("目标地块编号", key=f"draft_{st.session_state.setup_phase}_{c}").strip().upper()
+                            land_input = st.text_input("目标地块：", key=f"draft_{st.session_state.setup_phase}_{c}").strip().upper()
                             
-                            if st.button(f"🚩 确认占领 ({c})", key=f"btn_{st.session_state.setup_phase}_{c}"):
+                            btn_col1, btn_col2 = st.columns(2)
+                            
+                            with btn_col1:
+                                claim_btn = st.button("🚩 确认", key=f"btn_claim_{st.session_state.setup_phase}_{c}")
+                            with btn_col2:
+                                skip_btn = st.button("⏭️ 放弃", key=f"btn_skip_{st.session_state.setup_phase}_{c}")
+                            
+                            # --- 逻辑判定 ---
+                            if claim_btn:
                                 if not land_input:
-                                    st.error("⚠️ 不能为空！")
+                                    st.error("⚠️ 请输入地块！(如不想购买请点右侧放弃)")
                                 elif land_input in all_claimed_lands:
-                                    st.error(f"❌ 冲突！{land_input} 已经被捷足先登。")
+                                    st.error(f"❌ 冲突！{land_input} 已被占领。")
                                 else:
                                     # 校验通过，执行占领与扣费
                                     st.session_state.dict_land[c].append(land_input)
                                     st.session_state.dict_gold[c] -= 10
                                     
-                                    # 把这个国家加入“本轮已完结”名单
+                                    # 加入“本轮已完结”名单
                                     st.session_state.claimed_this_round.append(c)
                                     add_log(f"T0 (第{st.session_state.setup_phase}轮): {c} 抢占了 {land_input}")
+                                    save_data()
+                                    st.rerun()
                                     
-                                    save_data() # 进度存档
-                                    st.rerun()  # 刷新页面，该国家输入框消失
+                            if skip_btn:
+                                # 点击放弃，直接将其加入完结名单，不扣钱
+                                st.session_state.claimed_this_round.append(c)
+                                add_log(f"T0 (第{st.session_state.setup_phase}轮): {c} 战略放弃，保留 10 黄金")
+                                save_data()
+                                st.rerun()
+
                 else:
                     # 当 remaining_countries 为空时，说明所有人都按了确认
                     st.success(f"✅ 所有参演国已完成第 {st.session_state.setup_phase} 轮部署！")
