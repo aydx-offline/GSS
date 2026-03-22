@@ -53,6 +53,17 @@ st.markdown("""
     }
 
     [data-testid="stHeader"] {
+        background: transparent !important; /* 把白条变成完全透明 */
+    }
+    
+    /* 确保侧边栏收起后的 ">" 展开小箭头清晰可见 (战术金色) */
+    [data-testid="collapsedControl"] svg {
+        fill: #E9C46A !important;
+        color: #E9C46A !important;
+    }
+    
+    /* 隐藏右上角默认的 Streamlit Deploy 菜单(让画面更干净) */
+    .stAppDeployButton {
         display: none !important;
     }
 
