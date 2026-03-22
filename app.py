@@ -366,7 +366,7 @@ with left_col:
                     # 当 remaining_countries 为空时，说明所有人都按了确认
                     st.success(f"✅ 所有参演国已完成第 {st.session_state.setup_phase} 轮部署！")
                     
-                    if st.session_state.setup_phase < 3:
+                    if st.session_state.setup_phase < 2:
                         if st.button("➡️ 开启下一轮占领"):
                             st.session_state.setup_phase += 1
                             st.session_state.claimed_this_round = [] # 清空名单，新一轮开始
@@ -631,69 +631,73 @@ with left_col:
             "土地总数": [len(st.session_state.dict_land[c]) for c in st.session_state.clist]
         })
         st.table(res_df)
-        
+
+        if st.session_state.t > 0:
         # 2. 行动点数兑换模块 (仅在 1-8 回合显示)
-        if st.session_state.t > 0 and st.session_state.t <= 8:
+            if st.session_state.t > 0 and st.session_state.t <= 8:
+                st.divider()
+                st.subheader("⚡ 行动点数兑换中心")
+                st.info("兑换比例：1行动点数 = 10 黄金 / 8 石油 / 5 钢铁。未兑换的行动点数将在回合结束时自动清零。")
+                
+                ex_c = st.selectbox("请选择要进行兑换的国家", st.session_state.clist)
+                rem_ap = st.session_state.dict_action.get(ex_c, 0)
+                
+                if rem_ap <= 0:
+                    st.warning(f"账户提示：{ex_c} 国行动点已耗尽，无需兑换。")
+                else:
+                    st.markdown(f"**{ex_c} 国当前拥有 <span style='color:#E9C46A; font-size:1.2rem;'>{rem_ap}</span> 点剩余行动点**", unsafe_allow_html=True)
+                    
+                    # 使用三个并排的数字输入框，让玩家分配 AP
+                    ex1, ex2, ex3 = st.columns(3)
+                    to_gold = ex1.number_input("投入行动点数兑换 黄金", min_value=0, max_value=rem_ap, value=0, step=1, key=f"ex_g_{ex_c}")
+                    to_oil = ex2.number_input("投入行动点数兑换 石油", min_value=0, max_value=rem_ap, value=0, step=1, key=f"ex_o_{ex_c}")
+                    to_steel = ex3.number_input("投入行动点数兑换 钢铁", min_value=0, max_value=rem_ap, value=0, step=1, key=f"ex_s_{ex_c}")
+                    
+                    total_ex = to_gold + to_oil + to_steel
+                    
+                    if total_ex > rem_ap:
+                        st.error(f"❌ 数量错误！你试图兑换的行动点数总和（{total_ex}）超出了该国拥有的上限（{rem_ap}）。")
+                    elif total_ex > 0:
+                        if st.button(f"🔄 确认执行兑换 ({ex_c})"):
+                            # 执行扣除与资源增加
+                            st.session_state.dict_action[ex_c] -= total_ex
+                            g_earn, o_earn, s_earn = to_gold * 10, to_oil * 8, to_steel * 5
+                            
+                            st.session_state.dict_gold[ex_c] += g_earn
+                            st.session_state.dict_oil[ex_c] += o_earn
+                            st.session_state.dict_steel[ex_c] += s_earn
+                            
+                            add_log(f"兑换: {ex_c} 消耗 {total_ex} 行动点数，获得 {g_earn}G, {o_earn}O, {s_earn}S")
+                            save_data()
+                            st.success(f"✅ 兑换成功！{ex_c} 的国库资源已更新。")
+                            st.rerun()
+            
             st.divider()
-            st.subheader("⚡ 行动点数兑换中心")
-            st.info("兑换比例：1行动点数 = 10 黄金 / 8 石油 / 5 钢铁。未兑换的行动点数将在回合结束时自动清零。")
-            
-            ex_c = st.selectbox("请选择要进行兑换的国家", st.session_state.clist)
-            rem_ap = st.session_state.dict_action.get(ex_c, 0)
-            
-            if rem_ap <= 0:
-                st.warning(f"账户提示：{ex_c} 国行动点已耗尽，无需兑换。")
-            else:
-                st.markdown(f"**{ex_c} 国当前拥有 <span style='color:#E9C46A; font-size:1.2rem;'>{rem_ap}</span> 点剩余行动点**", unsafe_allow_html=True)
-                
-                # 使用三个并排的数字输入框，让玩家分配 AP
-                ex1, ex2, ex3 = st.columns(3)
-                to_gold = ex1.number_input("投入行动点数兑换 黄金", min_value=0, max_value=rem_ap, value=0, step=1, key=f"ex_g_{ex_c}")
-                to_oil = ex2.number_input("投入行动点数兑换 石油", min_value=0, max_value=rem_ap, value=0, step=1, key=f"ex_o_{ex_c}")
-                to_steel = ex3.number_input("投入行动点数兑换 钢铁", min_value=0, max_value=rem_ap, value=0, step=1, key=f"ex_s_{ex_c}")
-                
-                total_ex = to_gold + to_oil + to_steel
-                
-                if total_ex > rem_ap:
-                    st.error(f"❌ 数量错误！你试图兑换的行动点数总和（{total_ex}）超出了该国拥有的上限（{rem_ap}）。")
-                elif total_ex > 0:
-                    if st.button(f"🔄 确认执行兑换 ({ex_c})"):
-                        # 执行扣除与资源增加
-                        st.session_state.dict_action[ex_c] -= total_ex
-                        g_earn, o_earn, s_earn = to_gold * 10, to_oil * 8, to_steel * 5
-                        
-                        st.session_state.dict_gold[ex_c] += g_earn
-                        st.session_state.dict_oil[ex_c] += o_earn
-                        st.session_state.dict_steel[ex_c] += s_earn
-                        
-                        add_log(f"兑换: {ex_c} 消耗 {total_ex} 行动点数，获得 {g_earn}G, {o_earn}O, {s_earn}S")
-                        save_data()
-                        st.success(f"✅ 兑换成功！{ex_c} 的国库资源已更新。")
-                        st.rerun()
         
-        st.divider()
-        
-        # 3. 回合结束与结算逻辑
-        if st.button("⌛ 结束本轮推演并进入下一回合 (将自动清零未用行动点数)"):
-            # 废弃未使用的 AP，将其清零（替代了之前的强制换金币逻辑）
-            for c in st.session_state.clist:
-                st.session_state.dict_action[c] = 0
-            
-            # 回合更迭与资源再生
-            st.session_state.t += 1
-            if st.session_state.t <= 8:
+            # 3. 回合结束与结算逻辑
+            if st.button("⌛ 结束本轮推演并进入下一回合 (将自动清零未用行动点数)"):
+                # 废弃未使用的 AP，将其清零（替代了之前的强制换金币逻辑）
                 for c in st.session_state.clist:
-                    ls = st.session_state.dict_land[c]
-                    gb, ob, sb = 0, 0, 0
-                    for l in ls:
-                        b = LAND_BONUS.get(l, {})
-                        gb += b.get('g', 0); ob += b.get('o', 0); sb += b.get('s', 0)
-                    
-                    st.session_state.dict_gold[c] += (gb + st.session_state.dict_people[c])
-                    st.session_state.dict_oil[c], st.session_state.dict_steel[c] = len(ls)*2 + ob, len(ls) + sb
-                    st.session_state.dict_action[c] = len(ls)
-                    
-                    p = st.session_state.dict_people[c]
-                    st.session_state.dict_people[c] += 1 if p >= 10 else int((10-p)*0.5 + 2)
-            save_data()
-            st.rerun()
+                    st.session_state.dict_action[c] = 0
+                
+                # 回合更迭与资源再生
+                st.session_state.t += 1
+                if st.session_state.t <= 8:
+                    for c in st.session_state.clist:
+                        ls = st.session_state.dict_land[c]
+                        gb, ob, sb = 0, 0, 0
+                        for l in ls:
+                            b = LAND_BONUS.get(l, {})
+                            gb += b.get('g', 0); ob += b.get('o', 0); sb += b.get('s', 0)
+                        
+                        st.session_state.dict_gold[c] += (gb + st.session_state.dict_people[c])
+                        st.session_state.dict_oil[c], st.session_state.dict_steel[c] = len(ls)*2 + ob, len(ls) + sb
+                        st.session_state.dict_action[c] = len(ls)
+                        
+                        p = st.session_state.dict_people[c]
+                        st.session_state.dict_people[c] += 1 if p >= 10 else int((10-p)*0.5 + 2)
+                save_data()
+                st.rerun()
+        else:
+            # 第 0 回合的专属提示
+            st.info("📌 当前为初始领土分配阶段（第 0 回合），请在【⚔️ 军事推演】面板进入第 1 回合。")
