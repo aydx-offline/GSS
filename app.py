@@ -2,6 +2,7 @@ import streamlit as st
 import json
 import os
 import pandas as pd
+import copy
 
 # --- 1. 界面样式定制 (地缘战略指挥中心风格) ---
 st.set_page_config(page_title="GSS 地缘战略指挥系统", layout="wide")
@@ -151,6 +152,44 @@ def load_data():
         return True
     return False
 
+def backup_current_state():
+    """在执行动作前调用，将当前所有核心状态存入历史栈"""
+    # 如果 history 不存在，初始化它
+    if 'history' not in st.session_state:
+        st.session_state.history = []
+        
+    # 定义需要备份的键值
+    state_keys = [
+        't', 'clist', 'dict_land', 'dict_gold', 'dict_oil', 
+        'dict_steel', 'dict_people', 'dict_action', 'dict_ceasefire', 
+        'logs', 'country_deploy', 'land_deploy', 'setup_phase', 'claimed_this_round'
+    ]
+    
+    snapshot = {}
+    for k in state_keys:
+        if k in st.session_state:
+            # 必须使用深拷贝，否则修改当前状态会同步污染历史记录
+            snapshot[k] = copy.deepcopy(st.session_state[k])
+            
+    st.session_state.history.append(snapshot)
+    
+    # 最多允许连续撤销3步，防止占用过多内存）
+    if len(st.session_state.history) > 3:
+        st.session_state.history.pop(0)
+
+def undo_last_action():
+    """撤销并恢复到上一个状态"""
+    if 'history' in st.session_state and len(st.session_state.history) > 0:
+        # 弹出上一个状态
+        previous_state = st.session_state.history.pop()
+        # 更新当前 state
+        st.session_state.update(previous_state)
+        # 强制保存回本地 JSON，确保云端存档也回退了
+        save_data()
+        st.success("✅ 成功撤销上一步操作！")
+    else:
+        st.warning("⚠️ 历史记录为空，无法继续撤销。")
+
 # --- 3. 逻辑初始化 ---
 if 'initialized' not in st.session_state:
     if not load_data():
@@ -161,6 +200,10 @@ if 'initialized' not in st.session_state:
             'country_deploy': {}, 'land_deploy': {} 
         })
     st.session_state.initialized = True
+
+# 确保旧存档加载后也能正常使用撤回功能
+if 'history' not in st.session_state:
+    st.session_state.history = []
 
 def add_log(msg):
     st.session_state.logs.insert(0, f"[Round {st.session_state.t}] {msg}")
@@ -174,10 +217,16 @@ def calculate_score(c):
     return int(land_v + gold_v + oil_v + steel_v + ap_v)
 
 # --- 4. 侧边栏控制 ---
+
 with st.sidebar:
     st.title("🛰️ 战略控制台")
+    
+    # 新增：撤回操作按钮
+    if st.button("↩️ 撤销上一动作 (Undo)"):
+        undo_last_action()
+        st.rerun()
 
-    # === 云端专属：手动上传与下载存档 ===
+    # === 云端专属：手动上传与下载存档 ===    
     st.divider()
     st.markdown("### ☁️ 云端存档管理")
     
@@ -191,13 +240,15 @@ with st.sidebar:
                 mime="application/json"
             )
             
+
     # 2. 从本地电脑恢复存档
     uploaded_file = st.file_uploader("⬆️ 恢复历史存档", type="json")
     if uploaded_file is not None:
         if st.button("⚠️ 确认覆盖并恢复数据"):
+            backup_current_state()
             data = json.load(uploaded_file)
             st.session_state.update(data)
-            save_data() # 将上传的数据写回服务器的 json
+            save_data() 
             st.success("✅ 存档恢复成功！")
             st.rerun()
     st.divider()
@@ -208,6 +259,7 @@ with st.sidebar:
     if st.session_state.t == 0 and not st.session_state.clist:
         c_in = st.text_input("输入国家名（用英文逗号隔开）", "A, B, C, D")
         if st.button("📡 初始化推演系统"):
+            backup_current_state()
             names = [x.strip().upper() for x in c_in.split(',') if x.strip()]
             st.session_state.clist = names
             for c in names:
@@ -295,6 +347,7 @@ with left_col:
                     if current_sum != total_power:
                         st.error(f"部署错误：战力总数不对！{dep_c} 分配了 {current_sum} 点，但必须正好等于 {total_power} 点。")
                     else:
+                        backup_current_state()
                         st.session_state.country_deploy[dep_c] = dep_inputs
                         st.session_state.land_deploy.update(dep_inputs)
                         add_log(f"{dep_c} 完成了战力部署：{dep_inputs}")
@@ -345,6 +398,7 @@ with left_col:
                                 elif land_input in all_claimed_lands:
                                     st.error(f"❌ 冲突！{land_input} 已被占领。")
                                 else:
+                                    backup_current_state()
                                     # 校验通过，执行占领与扣费
                                     st.session_state.dict_land[c].append(land_input)
                                     st.session_state.dict_gold[c] -= 10
@@ -356,6 +410,7 @@ with left_col:
                                     st.rerun()
                                     
                             if skip_btn:
+                                backup_current_state()
                                 # 点击放弃，直接将其加入完结名单，不扣钱
                                 st.session_state.claimed_this_round.append(c)
                                 add_log(f"T0 (第{st.session_state.setup_phase}轮): {c} 战略放弃，保留 10 黄金")
@@ -368,12 +423,14 @@ with left_col:
                     
                     if st.session_state.setup_phase < 2:
                         if st.button("➡️ 开启下一轮占领"):
+                            backup_current_state()
                             st.session_state.setup_phase += 1
                             st.session_state.claimed_this_round = [] # 清空名单，新一轮开始
                             save_data()
                             st.rerun()
                     else:
                         if st.button("🏁 结算初始资源，正式进入第 1 回合"):
+                            backup_current_state()
                             st.session_state.t = 1
                             for c in st.session_state.clist:
                                 # 1. 自动计算该国已占领土地的 Bonus
@@ -500,6 +557,7 @@ with left_col:
                                 if not in_range:
                                     st.error(f"❌ 攻击偏离！目标超出打击范围，消耗了资源但未能交火。")
                                 else:
+                                    backup_current_state()
                                     # --- 战斗结算 ---
                                     defend_ppl = st.session_state.land_deploy.get(t_l, 0)
                                     
@@ -576,6 +634,7 @@ with left_col:
                                 st.session_state.dict_steel[c2] < s_b):
                                 st.error(f"❌ {c2} 资源余额不足，无法履行协议。")
                             else:
+                                backup_current_state()
                                 st.success("当前进度已保存")
                                 # 执行资源互换
                                 st.session_state.dict_gold[c1] += (g_b - g_a)
@@ -595,6 +654,7 @@ with left_col:
                         st.write("注：停战协定一旦签署，未来 3 回合内由系统强制执行，不可撕毁。")
                         
                         if st.button("✍️ 签署强制停战令"):
+                            backup_current_state()
                             pair = tuple(sorted([c1, c2]))
                             pair_key = f"{pair[0]}-{pair[1]}"
                             expire_t = st.session_state.t + 3 # 停战3回合
@@ -659,6 +719,7 @@ with left_col:
                         st.error(f"❌ 数量错误！你试图兑换的行动点数总和（{total_ex}）超出了该国拥有的上限（{rem_ap}）。")
                     elif total_ex > 0:
                         if st.button(f"🔄 确认执行兑换 ({ex_c})"):
+                            backup_current_state()
                             # 执行扣除与资源增加
                             st.session_state.dict_action[ex_c] -= total_ex
                             g_earn, o_earn, s_earn = to_gold * 10, to_oil * 8, to_steel * 5
@@ -676,6 +737,7 @@ with left_col:
         
             # 3. 回合结束与结算逻辑
             if st.button("⌛ 结束本轮推演并进入下一回合 (将自动清零未用行动点数)"):
+                backup_current_state()
                 # 废弃未使用的 AP，将其清零（替代了之前的强制换金币逻辑）
                 for c in st.session_state.clist:
                     st.session_state.dict_action[c] = 0
