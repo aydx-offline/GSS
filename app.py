@@ -222,7 +222,7 @@ with st.sidebar:
     st.title("🛰️ 战略控制台")
     
     # 新增：撤回操作按钮
-    if st.button("↩️ 撤销上一动作 (Undo)"):
+    if st.button("↩️ 撤回上一动作"):
         undo_last_action()
         st.rerun()
 
@@ -499,11 +499,13 @@ with left_col:
                             if target_owner and target_owner != active_c:
                                 st.error(f"❌ 移动失败：{t_l} 已被 {target_owner} 占领！进入该地请使用「进攻」指令。")
                             else:
+                                backup_current_state()
                                 # 扣除AP
                                 st.session_state.dict_action[active_c] -= ap_cost
                                 
                                 if not in_range:
                                     st.error(f"❌ 超出移动范围！行动失败，但仍扣除行动点数 {ap_cost}。")
+                                    save_data()
                                 else:
                                     # 执行移动更新
                                     st.session_state.country_deploy[active_c][f_l] -= troop_count
@@ -542,12 +544,14 @@ with left_col:
                                         defender = c
                                         break
                                         
-                                # 校验停战协议 (在扣除资源前拦截，体验更好)
+                                # 校验停战协议
                                 if defender:
                                     pair = f"{min(active_c, defender)}-{max(active_c, defender)}"
                                     if pair in st.session_state.dict_ceasefire and st.session_state.t <= st.session_state.dict_ceasefire[pair]:
                                         st.error(f"🛑 行动受阻：{active_c} 与 {defender} 处于强制停战期（至 T{st.session_state.dict_ceasefire[pair]}）！行动被国际法撤回。")
                                         st.stop()
+
+                                backup_current_state()
 
                                 # 扣除战争资源
                                 st.session_state.dict_action[active_c] -= ap_cost
@@ -556,6 +560,7 @@ with left_col:
                                 
                                 if not in_range:
                                     st.error(f"❌ 攻击偏离！目标超出打击范围，消耗了资源但未能交火。")
+                                    save_data()
                                 else:
                                     backup_current_state()
                                     # --- 战斗结算 ---
