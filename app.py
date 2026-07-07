@@ -303,7 +303,7 @@ with right_col:
     for l in st.session_state.logs[:12]: st.caption(l)
 
 with left_col:
-    tab_m, tab_deploy, tab_d, tab_s = st.tabs(["⚔️ 军事推演", "🏃‍兵力部署","🤝 外交博弈", "💰 资源核算"])
+    tab_deploy, tab_m, tab_d, tab_s = st.tabs(["🏃‍ 兵力部署", "⚔️ 军事推演", "🤝 外交博弈", "💰 资源核算"])
 
     with tab_deploy:
         if st.session_state.t == 0:
