@@ -83,6 +83,14 @@ def undo_last_action():
     else:
         st.warning("⚠️ 历史记录为空，无法继续撤销。")
 
+params = st.query_params
+if "lobby" in params and "current_lobby" not in st.session_state:
+    st.session_state.current_lobby = params["lobby"]
+    # 尝试直接加载，如果加载失败，可以清除参数避免死循环
+    if not load_data():
+        st.error("存档不存在，请重新进入。")
+        del st.query_params["lobby"]
+    st.rerun()
 
 if 'current_lobby' not in st.session_state:
     st.markdown("""
@@ -113,6 +121,7 @@ if 'current_lobby' not in st.session_state:
     if lobby_name:
         if st.button("进入房间"):
             st.session_state.current_lobby = lobby_name
+            st.query_params["lobby"] = lobby_name
             # 尝试加载该房间的存档
             if not load_data():
                 # 如果是新房间，初始化状态
@@ -280,94 +289,88 @@ def calculate_score(c):
 with st.sidebar:
     st.title("🛰️ 战略控制台")
     
-    # 新增：撤回操作按钮
-    if st.button("↩️ 撤回上一动作"):
-        undo_last_action()
-        st.rerun()
+    # --- 1. 核心快捷操作 ---
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("⬅️ 返回大厅"):
+            if 'current_lobby' in st.session_state: del st.session_state['current_lobby']
+            if 'lobby' in st.query_params: del st.query_params['lobby']
+            st.rerun()
+    with col2:
+        if st.button("↩️ 撤回"):
+            undo_last_action()
+            st.rerun()
 
-    
-# === 修改后的侧边栏存档管理 ===
     st.divider()
-    st.markdown("### 💾 存档与备份管理")
-    st.caption(f"当前战局: **{st.session_state.current_lobby}**")
-    
-    save_path = get_save_path()
-    if os.path.exists(save_path):
-        with open(save_path, "rb") as file:
-            st.download_button(
-                label="⬇️ 导出本地存档",
-                data=file,
-                file_name=f"{st.session_state.current_lobby}_backup.json",
-                mime="application/json"
-            )
-    else:
-        st.warning("当前无存档文件")
 
-    # 2. 恢复存档
-    uploaded_file = st.file_uploader("⬆️ 覆盖导入存档", type="json")
-    if uploaded_file is not None:
-        if st.button("⚠️ 确认覆盖当前战局"):
+    # --- 2. 存档管理 (高频使用) ---
+    with st.expander("💾 存档与备份管理", expanded=True):
+        st.caption(f"当前战局: **{st.session_state.get('current_lobby', '无')}**")
+        
+        save_path = get_save_path()
+        if os.path.exists(save_path):
+            with open(save_path, "rb") as file:
+                st.download_button("⬇️ 导出本地存档", file, f"{st.session_state.current_lobby}_backup.json", "application/json")
+        else:
+            st.warning("当前无存档")
+
+        uploaded_file = st.file_uploader("⬆️ 覆盖导入存档", type="json")
+        if uploaded_file and st.button("⚠️ 确认覆盖"):
             try:
-                # 读取并覆盖
                 data = json.load(uploaded_file)
                 st.session_state.update(data)
-                # 存入当前房间文件
                 save_data() 
                 st.success("✅ 恢复成功！")
                 st.rerun()
             except Exception as e:
-                st.error(f"❌ 存档文件错误: {e}")
-    
-    st.divider()
-    if st.session_state.t == 0 and not st.session_state.clist:
-        c_in = st.text_input("输入国家名（用英文逗号隔开）", "A, B, C, D")
-        if st.button("📡 初始化推演系统"):
-            backup_current_state()
-            names = [x.strip().upper() for x in c_in.split(',') if x.strip()]
-            st.session_state.clist = names
-            for c in names:
-                st.session_state.dict_gold[c], st.session_state.dict_land[c] = 30, []
-                st.session_state.dict_oil[c], st.session_state.dict_steel[c] = 0, 0
-                st.session_state.dict_people[c], st.session_state.dict_action[c] = 0, 0
-            save_data()
-            st.rerun()
-    st.divider()
+                st.error(f"❌ 错误: {e}")
 
-    
-    if st.button("⚠️ 重置所有进度"):
-        # 使用 get_save_path() 来获取当前房间的存档路径进行删除
-        path = get_save_path()
-        if os.path.exists(path):
-            os.remove(path)
-        st.session_state.clear()
-        st.rerun()
-    
-    # === 战局后台管理 ===
-    st.divider()
-    st.markdown("⚙️ 战局管理")
-    
-    # 获取所有存档文件
-    all_saves = [f for f in os.listdir(SAVE_DIR) if f.endswith('.json')]
-    
-    if not all_saves:
-        st.info("当前无存留战局。")
-    else:
-        # 显示房间列表并提供删除按钮
-        for save_file in all_saves:
-            lobby_name = save_file.replace('.json', '')
-            col1, col2 = st.columns([3, 1])
-            
-            with col1:
-                st.text(f"📁 {lobby_name}")
-            
-            with col2:
-                # 给每个文件配一个删除按钮
-                if st.button("🗑️", key=f"del_{save_file}", help=f"删除 {lobby_name} 战局"):
-                    os.remove(os.path.join(SAVE_DIR, save_file))
-                    # 如果删除的是当前正在进行的房间，强制刷新并清空状态
-                    if st.session_state.get('current_lobby') == lobby_name:
-                        st.session_state.clear()
-                    st.rerun()
+    # --- 3. 系统维护 (低频使用) ---
+    with st.expander("⚙️ 系统初始化"):
+        # 初始化
+        if st.session_state.get('t', 0) == 0 and not st.session_state.get('clist'):
+            c_in = st.text_input("初始化国家（逗号隔开）", "A, B, C, D")
+            if st.button("📡 初始化系统"):
+                backup_current_state()
+                names = [x.strip().upper() for x in c_in.split(',') if x.strip()]
+                st.session_state.clist = names
+                for c in names:
+                    st.session_state.dict_gold[c], st.session_state.dict_land[c] = 30, []
+                    st.session_state.dict_oil[c], st.session_state.dict_steel[c] = 0, 0
+                    st.session_state.dict_people[c], st.session_state.dict_action[c] = 0, 0
+                save_data()
+                st.rerun()
+        
+        # 重置与清理
+        if st.button("⚠️ 重置当前战局"):
+            path = get_save_path()
+            if os.path.exists(path): os.remove(path)
+            st.session_state.clear()
+            st.rerun()
+
+        st.divider()
+        st.subheader("🧹 战局后台管理")
+        all_saves = [f for f in os.listdir(SAVE_DIR) if f.endswith('.json')]
+        
+        if not all_saves:
+            st.info("当前无存留战局。")
+        else:
+            for save_file in all_saves:
+                lobby_name = save_file.replace('.json', '')
+                col1, col2 = st.columns([3, 1])
+                
+                col1.text(f"📁 {lobby_name}")
+                
+                with col2:
+                    # 使用 popover 弹出确认框
+                    with st.popover("🗑️"):
+                        st.warning(f"确定删除 **{lobby_name}**？\n\n此操作不可撤销！")
+                        if st.button("✅ 确认删除", key=f"confirm_{save_file}"):
+                            os.remove(os.path.join(SAVE_DIR, save_file))
+                            # 如果删除的是当前战局，清空会话
+                            if st.session_state.get('current_lobby') == lobby_name:
+                                st.session_state.clear()
+                            st.rerun()
 
     
 # --- 5. 主大屏渲染 ---
