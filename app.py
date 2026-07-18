@@ -146,7 +146,7 @@ def load_data():
 
 if 'current_lobby' not in st.session_state:
     st.title("🛡️ GSS 地缘战略指挥系统 - 战局入口")
-    lobby_name = st.text_input("请输入房间名称 (如: WarRoom_2026_01)")
+    lobby_name = st.text_input("请输入房间名称 (如: I_love_Banana)")
     
     if st.button("进入房间"):
         if lobby_name:
