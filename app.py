@@ -307,7 +307,7 @@ with right_col:
         st.markdown(f"""<div class="territory-card"><strong>{c} 国 ({len(lands)})</strong><br><small>{'|'.join(lands) if lands else "无领土"}</small></div>""", unsafe_allow_html=True)
     st.divider()
     st.markdown('<p style="font-size:24px; font-weight:bold; color:white;">推演日志</p>', unsafe_allow_html=True)
-    for l in st.session_state.logs[:12]: st.caption(l)
+    for l in st.session_state.logs[:8]: st.caption(l)
 
 with left_col:
     tab_deploy, tab_m, tab_d, tab_s = st.tabs(["🏃‍ 兵力部署", "⚔️ 军事推演", "🤝 外交博弈", "💰 资源核算"])
@@ -473,7 +473,7 @@ with left_col:
             t_l = c2.text_input("目标地块").upper().strip()
             # 读取该出发地的现有战力，用于限制输入最大值
             current_ppl = st.session_state.country_deploy.get(active_c, {}).get(f_l, 0) if f_l else 0
-            troop_count = c3.number_input(f"出动战力 (当前: {current_ppl})", min_value=1, max_value=5, value=1)
+            troop_count = c3.number_input(f"出动战力 (当前: {current_ppl})", min_value=1, value=1)
             
             # 第二排输入：环境与裁判判定
             c4, c5 = st.columns(2)
@@ -724,9 +724,9 @@ with left_col:
                     
                     # 使用三个并排的数字输入框，让玩家分配 AP
                     ex1, ex2, ex3 = st.columns(3)
-                    to_gold = ex1.number_input("投入（）个行动点数兑换 黄金", min_value=0, max_value=rem_ap, value=0, step=1, key=f"ex_g_{ex_c}")
-                    to_oil = ex2.number_input("投入()个行动点数兑换 石油", min_value=0, max_value=rem_ap, value=0, step=1, key=f"ex_o_{ex_c}")
-                    to_steel = ex3.number_input("投入（）个行动点数兑换 钢铁", min_value=0, max_value=rem_ap, value=0, step=1, key=f"ex_s_{ex_c}")
+                    to_gold = ex1.number_input("投入（ ）个行动点数兑换 黄金", min_value=0, max_value=rem_ap, value=0, step=1, key=f"ex_g_{ex_c}")
+                    to_oil = ex2.number_input("投入（ ）个行动点数兑换 石油", min_value=0, max_value=rem_ap, value=0, step=1, key=f"ex_o_{ex_c}")
+                    to_steel = ex3.number_input("投入（ ）个行动点数兑换 钢铁", min_value=0, max_value=rem_ap, value=0, step=1, key=f"ex_s_{ex_c}")
                     
                     total_ex = to_gold + to_oil + to_steel
                     
