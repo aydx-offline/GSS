@@ -85,7 +85,7 @@ def undo_last_action():
 
 
 if 'current_lobby' not in st.session_state:
-    st.title("Welcome to Global Strategy Simulation")
+    st.title("Welcome to \n Global Strategy Simulation")
     lobby_name = st.text_input("请输入房间名称 (如: Banana!!! / 血战到底 / 今晚掼蛋 / 我爱cmt)")
     
     if st.button("进入房间"):
