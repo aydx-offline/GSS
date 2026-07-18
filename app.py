@@ -285,7 +285,14 @@ score_cols = st.columns(len(st.session_state.clist))
 for i, c in enumerate(st.session_state.clist):
     with score_cols[i]:
         score = calculate_score(c)
-        st.metric(f"国家 {c}", f"{score} PTS")
+        st.markdown(f"""
+            <div style="margin-bottom: 5px;">
+                <div style="font-size: 14px; color: #A0AEC0; margin-bottom: 2px;">国家 {c}</div>
+                <div style="font-size: 28px; font-weight: bold; color: #FFFFFF; line-height: 1.2;">
+                    {score} <span style="font-size: 14px; color: #E9C46A; font-weight: normal; margin-left: 2px;">PTS</span>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
         st.progress(min(score/300, 1.0))
 
 st.divider()
@@ -450,8 +457,8 @@ with left_col:
                                 st.session_state.dict_gold[c] += gb
                                 
                                 # 4. 石油/钢铁 = 基础产量(领土数*2 或 *1) + 土地石油/钢铁 Bonus
-                                st.session_state.dict_oil[c] = len(ls) * 2 + ob
-                                st.session_state.dict_steel[c] = len(ls) + sb
+                                st.session_state.dict_oil[c] += len(ls) * 2 + ob
+                                st.session_state.dict_steel[c] += len(ls) + sb
                                 
                             save_data()
                             st.rerun()
@@ -528,74 +535,77 @@ with left_col:
                         if t_l in st.session_state.dict_land[active_c]:
                             st.error(f"❌ {t_l} 已经是你自己的领土了！")
                         else:
-                            ap_cost = 2 if sea else 1
-                            oil_cost = 4 if sea else 2
-                            steel_cost = 2 if sea else 1
+                            # 获取防守方
+                            defender = None
+                            for c in st.session_state.clist:
+                                if t_l in st.session_state.dict_land[c]:
+                                    defender = c
+                                    break
                             
-                            if (st.session_state.dict_action[active_c] < ap_cost or 
-                                st.session_state.dict_oil[active_c] < oil_cost or 
-                                st.session_state.dict_steel[active_c] < steel_cost):
-                                st.error(f"❌ 战争资源不足！需要行动点数:{ap_cost}, 油:{oil_cost}, 铁:{steel_cost}")
+                            if not defender:
+                                st.error(f"❌ 目标地块 {t_l} 尚未被任何国家占领！占领无主之地请使用「移动」指令，无需发起进攻。")
                             else:
-                                # 获取防守方
-                                defender = None
-                                for c in st.session_state.clist:
-                                    if t_l in st.session_state.dict_land[c]:
-                                        defender = c
-                                        break
-                                        
-                                # 校验停战协议
-                                if defender:
+                                # 确认有防守方后，才进行资源判定
+                                ap_cost = 2 if sea else 1
+                                oil_cost = 4 if sea else 2
+                                steel_cost = 2 if sea else 1
+                                
+                                if (st.session_state.dict_action[active_c] < ap_cost or 
+                                    st.session_state.dict_oil[active_c] < oil_cost or 
+                                    st.session_state.dict_steel[active_c] < steel_cost):
+                                    st.error(f"❌ 战争资源不足！需要行动点数:{ap_cost}, 油:{oil_cost}, 铁:{steel_cost}")
+                                else:
+                                    # 校验停战协议
                                     pair = f"{min(active_c, defender)}-{max(active_c, defender)}"
                                     if pair in st.session_state.dict_ceasefire and st.session_state.t <= st.session_state.dict_ceasefire[pair]:
                                         st.error(f"🛑 行动受阻：{active_c} 与 {defender} 处于强制停战期（至 T{st.session_state.dict_ceasefire[pair]}）！行动被国际法撤回。")
                                         st.stop()
 
-                                backup_current_state()
-
-                                # 扣除战争资源
-                                st.session_state.dict_action[active_c] -= ap_cost
-                                st.session_state.dict_oil[active_c] -= oil_cost
-                                st.session_state.dict_steel[active_c] -= steel_cost
-                                
-                                if not in_range:
-                                    st.error(f"❌ 攻击偏离！目标超出打击范围，消耗了资源但未能交火。")
-                                    save_data()
-                                else:
                                     backup_current_state()
-                                    # --- 战斗结算 ---
-                                    defend_ppl = st.session_state.land_deploy.get(t_l, 0)
+
+                                    # 扣除战争资源
+                                    st.session_state.dict_action[active_c] -= ap_cost
+                                    st.session_state.dict_oil[active_c] -= oil_cost
+                                    st.session_state.dict_steel[active_c] -= steel_cost
                                     
-                                    if troop_count > defend_ppl:
-                                        # 进攻胜利
-                                        if defender:
+                                    if not in_range:
+                                        st.error(f"❌ 攻击偏离！目标超出打击范围，消耗了资源但未能交火。")
+                                        save_data()
+                                    else:
+                                        # --- 战斗结算 ---
+                                        defend_ppl = st.session_state.land_deploy.get(t_l, 0)
+                                        
+                                        if troop_count > defend_ppl:
+                                            # 进攻胜利
                                             st.session_state.dict_land[defender].remove(t_l)
                                             st.session_state.country_deploy[defender].pop(t_l, None)
+                                            st.session_state.dict_people[defender] -= defend_ppl # 上一步新增的战败减人逻辑
+                                                
+                                            st.session_state.dict_land[active_c].append(t_l)
+                                            st.session_state.country_deploy[active_c][t_l] = troop_count
+                                            st.session_state.country_deploy[active_c][f_l] -= troop_count
                                             
-                                        st.session_state.dict_land[active_c].append(t_l)
-                                        st.session_state.country_deploy[active_c][t_l] = troop_count
-                                        st.session_state.country_deploy[active_c][f_l] -= troop_count
-                                        
-                                        st.session_state.land_deploy[f_l] = st.session_state.country_deploy[active_c][f_l]
-                                        st.session_state.land_deploy[t_l] = troop_count
-                                        
-                                        add_log(f"{active_c} 战胜 {defender if defender else '野怪'}，夺取 {t_l}")
-                                        st.success(f"🏆 进攻胜利！{active_c} 以 {troop_count} VS {defend_ppl} 的优势占领了 {t_l}。")
-                                        
-                                    elif defend_ppl > troop_count:
-                                        # 进攻失败
-                                        st.session_state.country_deploy[active_c][f_l] -= troop_count
-                                        st.session_state.land_deploy[f_l] = st.session_state.country_deploy[active_c][f_l]
-                                        
-                                        add_log(f"{active_c} 强攻 {t_l} 失败，{troop_count} 战力全军覆没")
-                                        st.error(f"💀 惨败！{active_c} 进攻部队（{troop_count}人）被防守方（{defend_ppl}人）全歼！")
-                                        
-                                    else:
-                                        # 平局
-                                        add_log(f"{active_c} 强攻 {t_l} 陷入僵局，部队退回")
-                                        st.warning(f"⚔️ 平局！双方（{troop_count} VS {defend_ppl}）势均力敌，进攻方退回原籍，无伤亡。")
-                                        
-                                save_data()
+                                            st.session_state.land_deploy[f_l] = st.session_state.country_deploy[active_c][f_l]
+                                            st.session_state.land_deploy[t_l] = troop_count
+                                            
+                                            add_log(f"{active_c} 战胜 {defender}，夺取 {t_l}")
+                                            st.success(f"🏆 进攻胜利！{active_c} 以 {troop_count} VS {defend_ppl} 的优势战胜了 {defender}，占领了 {t_l}。")
+                                            
+                                        elif defend_ppl > troop_count:
+                                            # 进攻失败
+                                            st.session_state.country_deploy[active_c][f_l] -= troop_count
+                                            st.session_state.land_deploy[f_l] = st.session_state.country_deploy[active_c][f_l]
+                                            st.session_state.dict_people[active_c] -= troop_count # 上一步新增的战败减人逻辑
+                                            
+                                            add_log(f"{active_c} 强攻 {t_l} 失败，{troop_count} 战力全军覆没")
+                                            st.error(f"💀 惨败！{active_c} 进攻部队（{troop_count}人）被防守方 {defender}（{defend_ppl}人）全歼！")
+                                            
+                                        else:
+                                            # 平局
+                                            add_log(f"{active_c} 强攻 {t_l} 陷入僵局，部队退回")
+                                            st.warning(f"⚔️ 平局！双方（{troop_count} VS {defend_ppl}）势均力敌，进攻方退回原籍，无伤亡。")
+                                            
+                                    save_data()
 
     with tab_d:
         # 规则提醒：最后一轮（通常是第8轮）不进行谈判
@@ -714,9 +724,9 @@ with left_col:
                     
                     # 使用三个并排的数字输入框，让玩家分配 AP
                     ex1, ex2, ex3 = st.columns(3)
-                    to_gold = ex1.number_input("投入行动点数兑换 黄金", min_value=0, max_value=rem_ap, value=0, step=1, key=f"ex_g_{ex_c}")
-                    to_oil = ex2.number_input("投入行动点数兑换 石油", min_value=0, max_value=rem_ap, value=0, step=1, key=f"ex_o_{ex_c}")
-                    to_steel = ex3.number_input("投入行动点数兑换 钢铁", min_value=0, max_value=rem_ap, value=0, step=1, key=f"ex_s_{ex_c}")
+                    to_gold = ex1.number_input("投入（）个行动点数兑换 黄金", min_value=0, max_value=rem_ap, value=0, step=1, key=f"ex_g_{ex_c}")
+                    to_oil = ex2.number_input("投入()个行动点数兑换 石油", min_value=0, max_value=rem_ap, value=0, step=1, key=f"ex_o_{ex_c}")
+                    to_steel = ex3.number_input("投入（）个行动点数兑换 钢铁", min_value=0, max_value=rem_ap, value=0, step=1, key=f"ex_s_{ex_c}")
                     
                     total_ex = to_gold + to_oil + to_steel
                     
@@ -746,7 +756,9 @@ with left_col:
                 # 废弃未使用的 AP，将其清零（替代了之前的强制换金币逻辑）
                 for c in st.session_state.clist:
                     st.session_state.dict_action[c] = 0
-                
+
+                add_log("🏁 本回合推演结束，系统进行资源结算并进入下一回合。")
+
                 # 回合更迭与资源再生
                 st.session_state.t += 1
                 if st.session_state.t <= 8:
@@ -758,7 +770,8 @@ with left_col:
                             gb += b.get('g', 0); ob += b.get('o', 0); sb += b.get('s', 0)
                         
                         st.session_state.dict_gold[c] += (gb + st.session_state.dict_people[c])
-                        st.session_state.dict_oil[c], st.session_state.dict_steel[c] = len(ls)*2 + ob, len(ls) + sb
+                        st.session_state.dict_oil[c] += (len(ls) * 2 + ob)
+                        st.session_state.dict_steel[c] += (len(ls) + sb)
                         st.session_state.dict_action[c] = len(ls)
                         
                         p = st.session_state.dict_people[c]
