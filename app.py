@@ -85,7 +85,12 @@ def undo_last_action():
 
 
 if 'current_lobby' not in st.session_state:
-    st.title("Welcome to \n Global Strategy Simulation")
+    st.markdown("""
+    <div style="text-align: center; margin-bottom: 20px;">
+        <span style="font-size: 18px; color: #A0AEC0;">Welcome to</span><br>
+        <span style="font-size: 50px; font-weight: bold; color: #FFFFFF;">GSS</span>
+    </div>
+""", unsafe_allow_html=True)
     lobby_name = st.text_input("请输入房间名称 (如: Banana!!! / 血战到底 / 今晚掼蛋 / 我爱cmt)")
     
     if st.button("进入房间"):
