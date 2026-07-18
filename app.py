@@ -93,6 +93,21 @@ if 'current_lobby' not in st.session_state:
 """, unsafe_allow_html=True)
     lobby_name = st.text_input("请输入房间名称 (如: Banana!!! / 血战到底 / 今晚掼蛋 / 我爱cmt)")
     
+    if os.path.exists(SAVE_DIR):
+        existing_games = [f.replace('.json', '') for f in os.listdir(SAVE_DIR) if f.endswith('.json')]
+        if existing_games:
+            st.info(f" 当前服务器已有存档: {', '.join(existing_games)}")
+            # 或者做一个选择器
+            selected_lobby = st.selectbox("选择或输入房间名", [""] + existing_games)
+            if selected_lobby:
+                lobby_name = selected_lobby
+            else:
+                lobby_name = st.text_input("或手动输入新房间名称")
+        else:
+            lobby_name = st.text_input("请输入房间名称 (如: Banana!!! / 血战到底 / 今晚掼蛋 / 我爱cmt)")
+    else:
+        lobby_name = st.text_input("请输入房间名称 (如: Banana!!! / 血战到底 / 今晚掼蛋 / 我爱cmt)")
+    
     if st.button("进入房间"):
         if lobby_name:
             st.session_state.current_lobby = lobby_name
@@ -324,6 +339,33 @@ with st.sidebar:
             os.remove(path)
         st.session_state.clear()
         st.rerun()
+    
+    # === 战局后台管理 ===
+    st.divider()
+    st.markdown("⚙️ 战局管理")
+    
+    # 获取所有存档文件
+    all_saves = [f for f in os.listdir(SAVE_DIR) if f.endswith('.json')]
+    
+    if not all_saves:
+        st.info("当前无存留战局。")
+    else:
+        # 显示房间列表并提供删除按钮
+        for save_file in all_saves:
+            lobby_name = save_file.replace('.json', '')
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                st.text(f"📁 {lobby_name}")
+            
+            with col2:
+                # 给每个文件配一个删除按钮
+                if st.button("🗑️", key=f"del_{save_file}", help=f"删除 {lobby_name} 战局"):
+                    os.remove(os.path.join(SAVE_DIR, save_file))
+                    # 如果删除的是当前正在进行的房间，强制刷新并清空状态
+                    if st.session_state.get('current_lobby') == lobby_name:
+                        st.session_state.clear()
+                    st.rerun()
 
     
 # --- 5. 主大屏渲染 ---
