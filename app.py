@@ -93,23 +93,26 @@ if 'current_lobby' not in st.session_state:
 """, unsafe_allow_html=True)
     lobby_name = st.text_input("请输入房间名称 (如: Banana!!! / 血战到底 / 今晚掼蛋 / 我爱cmt)")
     
-    if os.path.exists(SAVE_DIR):
-        existing_games = [f.replace('.json', '') for f in os.listdir(SAVE_DIR) if f.endswith('.json')]
+    # 确保文件夹始终存在
+    if not os.path.exists(SAVE_DIR):
+        os.makedirs(SAVE_DIR)
+
+    existing_games = [f.replace('.json', '') for f in os.listdir(SAVE_DIR) if f.endswith('.json')]
+
+    # 后续直接使用 existing_games 即可
+    mode = st.radio("战局选择模式", ["选择现有房间", "创建新房间"], horizontal=True)
+
+    if mode == "选择现有房间":
         if existing_games:
-            st.info(f" 当前服务器已有存档: {', '.join(existing_games)}")
-            # 或者做一个选择器
-            selected_lobby = st.selectbox("选择或输入房间名", [""] + existing_games)
-            if selected_lobby:
-                lobby_name = selected_lobby
-            else:
-                lobby_name = st.text_input("或手动输入新房间名称")
+            lobby_name = st.selectbox("点击选择房间", existing_games)
         else:
-            lobby_name = st.text_input("请输入房间名称 (如: Banana!!! / 血战到底 / 今晚掼蛋 / 我爱cmt)")
+            st.warning("暂无存档，请切换至“创建新房间”")
+            lobby_name = None
     else:
-        lobby_name = st.text_input("请输入房间名称 (如: Banana!!! / 血战到底 / 今晚掼蛋 / 我爱cmt)")
-    
-    if st.button("进入房间"):
-        if lobby_name:
+        lobby_name = st.text_input("请输入新房间名称 (如: Banana!!! / 血战到底 / 今晚掼蛋 / 我爱cmt)")
+
+    if lobby_name:
+        if st.button("进入房间"):
             st.session_state.current_lobby = lobby_name
             # 尝试加载该房间的存档
             if not load_data():
