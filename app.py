@@ -113,19 +113,9 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. 存档逻辑与核心数据 ---
-SAVE_FILE = "gss_website_save.json"
-LAND_BONUS = {
-    'A1': {'g': 3}, 'A2': {'o': 2}, 'A3': {'o': 5}, 'A4': {'o': 3}, 'A5': {'g': 5},
-    'A6': {'s': 3}, 'A7': {'s': 3}, 'A8': {'g': 3}, 'B1': {'s': 3}, 'B2': {'s': 4},
-    'B3': {'o': 3}, 'B4': {'g': 5}, 'C1': {'o': 4}, 'C2': {'o': 3}, 'C3': {'s': 4},
-    'C4': {'g': 3}, 'D1': {'o': 5}, 'D2': {'o': 6}, 'D3': {'o': 3}, 'D4': {'o': 3},
-    'E1': {'o': 3}, 'E2': {'s': 3}, 'E3': {'s': 4}, 'E4': {'g': 5}, 'F1': {'g': 2},
-    'F2': {'g': 5}, 'F3': {'o': 3}, 'F4': {'s': 4}, 'G1': {'s': 3}, 'G2': {'g': 4}
-}
 
 def save_data():
-    """保存当前所有 session_state 到本地文件"""
+    """保存当前所有 session_state 到当前房间的专属文件"""
     data = {
         't': st.session_state.t,
         'clist': st.session_state.clist,
@@ -138,19 +128,65 @@ def save_data():
         'dict_ceasefire': st.session_state.dict_ceasefire,
         'logs': st.session_state.logs,
         'country_deploy': st.session_state.country_deploy, 
-        'land_deploy':  st.session_state.land_deploy
+        'land_deploy':  st.session_state.land_deploy,
+        'history': st.session_state.get('history', [])
     }
-    with open(SAVE_FILE, 'w', encoding='utf-8') as f:
+    with open(get_save_path(), 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
 
 def load_data():
-    """从本地文件读取存档"""
-    if os.path.exists(SAVE_FILE):
-        with open(SAVE_FILE, 'r', encoding='utf-8') as f:
+    """从当前房间文件读取存档"""
+    path = get_save_path()
+    if os.path.exists(path):
+        with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
             st.session_state.update(data)
         return True
     return False
+
+if 'current_lobby' not in st.session_state:
+    st.title("🛡️ GSS 地缘战略指挥系统 - 战局入口")
+    lobby_name = st.text_input("请输入房间名称 (如: WarRoom_2026_01)")
+    
+    if st.button("进入房间"):
+        if lobby_name:
+            st.session_state.current_lobby = lobby_name
+            # 尝试加载该房间的存档
+            if not load_data():
+                # 如果是新房间，初始化状态
+                st.session_state.update({
+                    't': 0, 'clist': [], 'dict_land': {}, 'dict_gold': {}, 
+                    'dict_oil': {}, 'dict_steel': {}, 'dict_people': {}, 
+                    'dict_action': {}, 'dict_ceasefire': {}, 'logs': [],
+                    'country_deploy': {}, 'land_deploy': {}, 'history': []
+                })
+                save_data() # 创建新文件
+            st.session_state.initialized = True
+            st.rerun()
+    st.stop() # 关键：未进入房间前，拦截后续所有内容的显示
+
+
+# --- 核心数据 ---
+LAND_BONUS = {
+    'A1': {'g': 3}, 'A2': {'o': 2}, 'A3': {'o': 5}, 'A4': {'o': 3}, 'A5': {'g': 5},
+    'A6': {'s': 3}, 'A7': {'s': 3}, 'A8': {'g': 3}, 'B1': {'s': 3}, 'B2': {'s': 4},
+    'B3': {'o': 3}, 'B4': {'g': 5}, 'C1': {'o': 4}, 'C2': {'o': 3}, 'C3': {'s': 4},
+    'C4': {'g': 3}, 'D1': {'o': 5}, 'D2': {'o': 6}, 'D3': {'o': 3}, 'D4': {'o': 3},
+    'E1': {'o': 3}, 'E2': {'s': 3}, 'E3': {'s': 4}, 'E4': {'g': 5}, 'F1': {'g': 2},
+    'F2': {'g': 5}, 'F3': {'o': 3}, 'F4': {'s': 4}, 'G1': {'s': 3}, 'G2': {'g': 4}
+}
+
+
+# --- 1. 动态存档管理 ---
+SAVE_DIR = "games"
+if not os.path.exists(SAVE_DIR):
+    os.makedirs(SAVE_DIR)
+
+def get_save_path():
+    # 从 session_state 获取当前房间名
+    lobby = st.session_state.get('current_lobby', 'default')
+    return os.path.join(SAVE_DIR, f"{lobby}.json")
+
 
 def backup_current_state():
     """在执行动作前调用，将当前所有核心状态存入历史栈"""
@@ -226,36 +262,34 @@ with st.sidebar:
         undo_last_action()
         st.rerun()
 
-    # === 云端专属：手动上传与下载存档 ===    
-    st.divider()
-    st.markdown("### ☁️ 云端存档管理")
     
-    # 1. 下载当前存档到本地电脑
-    if os.path.exists(SAVE_FILE):
-        with open(SAVE_FILE, "rb") as file:
+# === 修改后的侧边栏存档管理 ===
+    st.divider()
+    st.markdown(f"### ☁️ 战局: {st.session_state.current_lobby}")
+    
+    # 1. 下载当前房间存档
+    save_path = get_save_path()
+    if os.path.exists(save_path):
+        with open(save_path, "rb") as file:
             st.download_button(
-                label="⬇️ 导出今日存档",
+                label="⬇️ 导出本局存档",
                 data=file,
-                file_name=f"gss_backup_T{st.session_state.t}.json",
+                file_name=f"{st.session_state.current_lobby}_T{st.session_state.t}.json",
                 mime="application/json"
             )
-            
 
-    # 2. 从本地电脑恢复存档
-    uploaded_file = st.file_uploader("⬆️ 恢复历史存档", type="json")
+    # 2. 恢复存档
+    uploaded_file = st.file_uploader("⬆️ 覆盖恢复当前战局", type="json")
     if uploaded_file is not None:
-        if st.button("⚠️ 确认覆盖并恢复数据"):
+        if st.button("⚠️ 确认覆盖"):
             backup_current_state()
             data = json.load(uploaded_file)
             st.session_state.update(data)
             save_data() 
-            st.success("✅ 存档恢复成功！")
+            st.success("✅ 恢复成功！")
             st.rerun()
-    st.divider()
-
-    st.button("💾 保存当前进度", on_click=save_data)
-    st.success("当前进度已保存")
     
+
     if st.session_state.t == 0 and not st.session_state.clist:
         c_in = st.text_input("输入国家名（用英文逗号隔开）", "A, B, C, D")
         if st.button("📡 初始化推演系统"):
@@ -269,9 +303,50 @@ with st.sidebar:
             save_data()
             st.rerun()
     st.divider()
+
+    
     if st.button("⚠️ 重置所有进度"):
-        if os.path.exists(SAVE_FILE): os.remove(SAVE_FILE)
-        st.session_state.clear(); st.rerun()
+        # 使用 get_save_path() 来获取当前房间的存档路径进行删除
+        path = get_save_path()
+        if os.path.exists(path):
+            os.remove(path)
+        st.session_state.clear()
+        st.rerun()
+
+    
+    # === 本地存档与读档管理 ===
+    st.divider()
+    st.markdown("### 💾 本地存档管理")
+    st.caption(f"当前战局: **{st.session_state.current_lobby}**")
+
+    # 1. 导出/下载当前战局 (JSON 格式)
+    save_path = get_save_path()
+    if os.path.exists(save_path):
+        with open(save_path, "rb") as file:
+            st.download_button(
+                label="⬇️ 导出本地存档",
+                data=file,
+                file_name=f"{st.session_state.current_lobby}_backup.json",
+                mime="application/json"
+            )
+    else:
+        st.warning("当前房间暂无存档文件")
+
+    # 2. 导入/覆盖当前战局 (上传 JSON 并自动触发覆盖)
+    uploaded_file = st.file_uploader("⬆️ 覆盖导入存档", type="json")
+    if uploaded_file is not None:
+        if st.button("⚠️ 确认覆盖当前战局"):
+            try:
+                # 读取上传的文件内容
+                data = json.load(uploaded_file)
+                # 覆盖当前的 session_state
+                st.session_state.update(data)
+                # 立即保存到服务器的房间文件中，实现云端同步
+                save_data() 
+                st.success("✅ 恢复成功！")
+                st.rerun() # 刷新页面以加载数据
+            except Exception as e:
+                st.error(f"❌ 存档格式错误: {e}")
 
 # --- 5. 主大屏渲染 ---
 st.title(f"第 {st.session_state.t} 回合")
