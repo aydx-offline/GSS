@@ -91,7 +91,6 @@ if 'current_lobby' not in st.session_state:
         <span style="font-size: 50px; font-weight: bold; color: #FFFFFF;">Global Strategy Simulation</span>
     </div>
 """, unsafe_allow_html=True)
-    lobby_name = st.text_input("请输入房间名称 (如: Banana!!! / 血战到底 / 今晚掼蛋 / 我爱cmt)")
     
     # 确保文件夹始终存在
     if not os.path.exists(SAVE_DIR):
