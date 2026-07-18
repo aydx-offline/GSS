@@ -4,6 +4,108 @@ import os
 import pandas as pd
 import copy
 
+# --- 房间逻辑 ---
+SAVE_DIR = "games"
+if not os.path.exists(SAVE_DIR):
+    os.makedirs(SAVE_DIR)
+
+def get_save_path():
+    # 从 session_state 获取当前房间名
+    lobby = st.session_state.get('current_lobby', 'default')
+    return os.path.join(SAVE_DIR, f"{lobby}.json")
+
+
+def save_data():
+    """保存当前所有 session_state 到当前房间的专属文件"""
+    data = {
+        't': st.session_state.t,
+        'clist': st.session_state.clist,
+        'dict_land': st.session_state.dict_land,
+        'dict_gold': st.session_state.dict_gold,
+        'dict_oil': st.session_state.dict_oil,
+        'dict_steel': st.session_state.dict_steel,
+        'dict_people': st.session_state.dict_people,
+        'dict_action': st.session_state.dict_action,
+        'dict_ceasefire': st.session_state.dict_ceasefire,
+        'logs': st.session_state.logs,
+        'country_deploy': st.session_state.country_deploy, 
+        'land_deploy':  st.session_state.land_deploy,
+        'history': st.session_state.get('history', [])
+    }
+    with open(get_save_path(), 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+def load_data():
+    """从当前房间文件读取存档"""
+    path = get_save_path()
+    if os.path.exists(path):
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            st.session_state.update(data)
+        return True
+    return False
+
+def backup_current_state():
+    """在执行动作前调用，将当前所有核心状态存入历史栈"""
+    # 如果 history 不存在，初始化它
+    if 'history' not in st.session_state:
+        st.session_state.history = []
+        
+    # 定义需要备份的键值
+    state_keys = [
+        't', 'clist', 'dict_land', 'dict_gold', 'dict_oil', 
+        'dict_steel', 'dict_people', 'dict_action', 'dict_ceasefire', 
+        'logs', 'country_deploy', 'land_deploy', 'setup_phase', 'claimed_this_round'
+    ]
+    
+    snapshot = {}
+    for k in state_keys:
+        if k in st.session_state:
+            # 必须使用深拷贝，否则修改当前状态会同步污染历史记录
+            snapshot[k] = copy.deepcopy(st.session_state[k])
+            
+    st.session_state.history.append(snapshot)
+    
+    # 最多允许连续撤销3步，防止占用过多内存）
+    if len(st.session_state.history) > 3:
+        st.session_state.history.pop(0)
+
+def undo_last_action():
+    """撤销并恢复到上一个状态"""
+    if 'history' in st.session_state and len(st.session_state.history) > 0:
+        # 弹出上一个状态
+        previous_state = st.session_state.history.pop()
+        # 更新当前 state
+        st.session_state.update(previous_state)
+        # 强制保存回本地 JSON，确保云端存档也回退了
+        save_data()
+        st.success("✅ 成功撤销上一步操作！")
+    else:
+        st.warning("⚠️ 历史记录为空，无法继续撤销。")
+
+
+if 'current_lobby' not in st.session_state:
+    st.title("🛡️ GSS 地缘战略指挥系统 - 战局入口")
+    lobby_name = st.text_input("请输入房间名称 (如: I_love_Banana/血战到底/今晚掼蛋)")
+    
+    if st.button("进入房间"):
+        if lobby_name:
+            st.session_state.current_lobby = lobby_name
+            # 尝试加载该房间的存档
+            if not load_data():
+                # 如果是新房间，初始化状态
+                st.session_state.update({
+                    't': 0, 'clist': [], 'dict_land': {}, 'dict_gold': {}, 
+                    'dict_oil': {}, 'dict_steel': {}, 'dict_people': {}, 
+                    'dict_action': {}, 'dict_ceasefire': {}, 'logs': [],
+                    'country_deploy': {}, 'land_deploy': {}, 'history': []
+                })
+                save_data() # 创建新文件
+            st.session_state.initialized = True
+            st.rerun()
+    st.stop() # 关键：未进入房间前，拦截后续所有内容的显示
+
+
 # --- 1. 界面样式定制 (地缘战略指挥中心风格) ---
 st.set_page_config(page_title="GSS 地缘战略指挥系统", layout="wide")
 
@@ -114,58 +216,6 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 
-def save_data():
-    """保存当前所有 session_state 到当前房间的专属文件"""
-    data = {
-        't': st.session_state.t,
-        'clist': st.session_state.clist,
-        'dict_land': st.session_state.dict_land,
-        'dict_gold': st.session_state.dict_gold,
-        'dict_oil': st.session_state.dict_oil,
-        'dict_steel': st.session_state.dict_steel,
-        'dict_people': st.session_state.dict_people,
-        'dict_action': st.session_state.dict_action,
-        'dict_ceasefire': st.session_state.dict_ceasefire,
-        'logs': st.session_state.logs,
-        'country_deploy': st.session_state.country_deploy, 
-        'land_deploy':  st.session_state.land_deploy,
-        'history': st.session_state.get('history', [])
-    }
-    with open(get_save_path(), 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
-
-def load_data():
-    """从当前房间文件读取存档"""
-    path = get_save_path()
-    if os.path.exists(path):
-        with open(path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            st.session_state.update(data)
-        return True
-    return False
-
-if 'current_lobby' not in st.session_state:
-    st.title("🛡️ GSS 地缘战略指挥系统 - 战局入口")
-    lobby_name = st.text_input("请输入房间名称 (如: I_love_Banana)")
-    
-    if st.button("进入房间"):
-        if lobby_name:
-            st.session_state.current_lobby = lobby_name
-            # 尝试加载该房间的存档
-            if not load_data():
-                # 如果是新房间，初始化状态
-                st.session_state.update({
-                    't': 0, 'clist': [], 'dict_land': {}, 'dict_gold': {}, 
-                    'dict_oil': {}, 'dict_steel': {}, 'dict_people': {}, 
-                    'dict_action': {}, 'dict_ceasefire': {}, 'logs': [],
-                    'country_deploy': {}, 'land_deploy': {}, 'history': []
-                })
-                save_data() # 创建新文件
-            st.session_state.initialized = True
-            st.rerun()
-    st.stop() # 关键：未进入房间前，拦截后续所有内容的显示
-
-
 # --- 核心数据 ---
 LAND_BONUS = {
     'A1': {'g': 3}, 'A2': {'o': 2}, 'A3': {'o': 5}, 'A4': {'o': 3}, 'A5': {'g': 5},
@@ -176,55 +226,6 @@ LAND_BONUS = {
     'F2': {'g': 5}, 'F3': {'o': 3}, 'F4': {'s': 4}, 'G1': {'s': 3}, 'G2': {'g': 4}
 }
 
-
-# --- 1. 动态存档管理 ---
-SAVE_DIR = "games"
-if not os.path.exists(SAVE_DIR):
-    os.makedirs(SAVE_DIR)
-
-def get_save_path():
-    # 从 session_state 获取当前房间名
-    lobby = st.session_state.get('current_lobby', 'default')
-    return os.path.join(SAVE_DIR, f"{lobby}.json")
-
-
-def backup_current_state():
-    """在执行动作前调用，将当前所有核心状态存入历史栈"""
-    # 如果 history 不存在，初始化它
-    if 'history' not in st.session_state:
-        st.session_state.history = []
-        
-    # 定义需要备份的键值
-    state_keys = [
-        't', 'clist', 'dict_land', 'dict_gold', 'dict_oil', 
-        'dict_steel', 'dict_people', 'dict_action', 'dict_ceasefire', 
-        'logs', 'country_deploy', 'land_deploy', 'setup_phase', 'claimed_this_round'
-    ]
-    
-    snapshot = {}
-    for k in state_keys:
-        if k in st.session_state:
-            # 必须使用深拷贝，否则修改当前状态会同步污染历史记录
-            snapshot[k] = copy.deepcopy(st.session_state[k])
-            
-    st.session_state.history.append(snapshot)
-    
-    # 最多允许连续撤销3步，防止占用过多内存）
-    if len(st.session_state.history) > 3:
-        st.session_state.history.pop(0)
-
-def undo_last_action():
-    """撤销并恢复到上一个状态"""
-    if 'history' in st.session_state and len(st.session_state.history) > 0:
-        # 弹出上一个状态
-        previous_state = st.session_state.history.pop()
-        # 更新当前 state
-        st.session_state.update(previous_state)
-        # 强制保存回本地 JSON，确保云端存档也回退了
-        save_data()
-        st.success("✅ 成功撤销上一步操作！")
-    else:
-        st.warning("⚠️ 历史记录为空，无法继续撤销。")
 
 # --- 3. 逻辑初始化 ---
 if 'initialized' not in st.session_state:
